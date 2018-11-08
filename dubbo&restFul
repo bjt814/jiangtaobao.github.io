@@ -1,0 +1,87 @@
+一、dubbo简介
+dubbo可以用三点来概括：一款分布式服务框架、高性能和透明化的RPC远程服务调用方案、SOA服务治理方案。
+Dubbo的架构如下图所示：
+
+这里一共有4个角色，分别为provider,consumer,registry,monitor。registey是注册中心，或者说是soa架构中的数据总线，这个组件不需要我们开发，有现成的解决方案，一般使用zookeeper，也可以选择redis等。Monitor是统计服务的调用次数和调用时间的监控中心，也不是我们开发时的关注对象，框架已经完成了，只要下载下来部署到tomcat就好了。开发人员主要开发的是provider和consumer，一个是提供者，用来提供服务，一个是消费者，向provider端请求服务。二者会依赖相同的接口，provider继承接口并实现后，向注册中心zookepper注册服务并向外暴露服务接口。Consumer向注册中心注册所需要的接口，注册中心给consumer返回提供该接口服务的provider的ip和端口。二者的详细调用关系如下：
+0.服务容器负责启动，加载，运行服务提供者。 
+1.服务提供者在启动时，向注册中心注册自己提供的服务。 
+2.服务消费者在启动时，向注册中心订阅自己所需的服务。 
+3.注册中心返回服务提供者地址列表给消费者，如果有变更，注册中心将基于长连接推送变更数据给消费者。 
+4.服务消费者，从提供者地址列表中，基于软负载均衡算法，选一台提供者进行调用，如果调用失败，再选另一台调用。 
+5.服务消费者和提供者，在内存中累计调用次数和调用时间，定时每分钟发送一次统计数据到监控中心
+二、Dubbo和rest风格的微服务对比。
+Dubbo起源于SOA，SOA其实和微服务没太大差别，我理解他俩最大的区别就是服务体量大小的区别了。Dubbo其实也是一种比较流行的微服务框架，但是可惜的是Dubbo不支持rest，它向外提供的服务通过RPC调用。想要发布rest风格的服务，需要利用第三方代理相同的接口发布rest服务。后来当当网基于Dubbo开发出了Dubbox框架，Dubbox与Dubbo最大的区别就是支持了rest。下面将从多个方面比较Dubbo和rest风格的微服务。
+1、  通信协议：Dubbo 使用Dubbo、Hessian等 RPC 通讯协议，缺省协议采用单一长连接和 NIO 异步通讯，适合于小数据量大并发的服务调用，以及服务消费者机器数远大于服务提供者机器数的情况。虽然Dubbo 支持短连接大数据量的服务提供模式，但绝大多数情况下都是使用长连接小数据量的模式提供服务使用的。RPC协议一般是基于TCP的，而rest使用的协议是HTTP，因为它们所处的网络层次不一样，必然传输速度和传输数据量有所差异。
+2、  性能比较：通过比较dubbo和springcloud的两种微服务架构的性能。发现dubbo的性能有微弱的优势，dubbo的网络消耗小于springcloud。实验参数如下：
+使用一个 POJO 对象包含 10 个属性，请求 10 万次，Dubbo 和 Spring Cloud 在不同的线程数量下，每次请求耗时（ms）如下：
+
+3、  服务依赖方式：dubbo服务提供方与消费方通过接口的方式依赖。因此需要为每个微服务定义了各自的 Interface接口，并通过持续集成发布到私有仓库中，调用方应用对微服务提供的抽象接口存在强依赖关系，开发、测试、集成环境都需要严格的管理版本依赖。Rest服务提供方和服务消费方通过 JSON 方式交互，因此只需要定义好相关 JSON 字段即可，消费方和提供方无接口依赖。通过注解方式来实现服务配置，对于程序有一定入侵。
+4、  开发难度：基于dubbo的微服务开发难度相对于其他框架大一些，但也更灵活。对于微服务需要的分布式配置、服务网关、分布式追踪系统等核心要素需要实现各种filter来实现。
+三、dubbo的优缺点
+优点：
+1、 透明化的远程方法调用，像调用本地方法一样调用远程方法；只需简单配置，没有任何API侵入。
+2、 软负载均衡及容错机制
+可在内网替代nginx lvs等硬件负载均衡器。
+3、 服务注册中心自动注册 & 配置管理
+不需要写死服务提供者地址，注册中心基于接口名自动查询提供者ip。
+使用类似zookeeper等分布式协调服务作为服务注册中心，可以将绝大部分项目配置移入zookeeper集群。
+5、  服务接口监控与治理
+Dubbo-admin与Dubbo-monitor提供了完善的服务接口管理与监控功能，针对不同应用的不同接口，可以进行 多版本，多协议，多注册中心管理。
+6、  使用RPC实现通信调用服务，调用速度和数据传输尺寸都有明显优势。
+  缺点：
+1、 只支持JAVA语言
+2、 Dubbo只是实现了服务治理，其他组件需要另外整合以实现对应的功能
+3、 服务提供方与调用方接口依赖方式太强：调用方对提供方的抽象接口存在强依赖关系，需要严格的管理版本依赖，才不会出现服务方与调用方的不一致导致应用无法编译成功等一系列问题；
+4、 服务对平台敏感，难以简单复用：通常我们在提供对外服务时，都会以REST的方式提供出去，这样可以实现跨平台的特点。
+在Dubbo中我们要提供REST接口时，不得不实现一层代理，用来将RPC接口转换成REST接口进行对外发布。
+ 四、dubbo的使用
+dubbo的容器是sping，所以它对代码没有太多的侵入，只需要加入简单的配置文件就可以支持dubbo所提供的功能。一般dubbo的jar包依赖是用maven管理的，所以dubbo的使用从pom文件引入依赖开始。
+1、        在pom文件中引入dubbo所依赖的jar包
+2、        Provider端编写接口的实现类
+3、        新建provider.xml配置文件，配置接口向注册中心注册和接口暴露。
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:dubbo="http://code.alibabatech.com/schema/dubbo"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+       http://www.springframework.org/schema/beans/spring-beans.xsd
+       http://code.alibabatech.com/schema/dubbo
+       http://code.alibabatech.com/schema/dubbo/dubbo.xsd">
+    <!--定义了提供方应用信息，用于计算依赖关系；在 dubbo-admin 或 dubbo-monitor 会显示这个名字，方便辨识-->
+    <dubbo:application name="first-provider" owner="programmer" organization="dubbox"/>
+    <!--使用 zookeeper 注册中心暴露服务，注意要先开启 zookeeper-->
+    <dubbo:registry address="zookeeper://localhost:2181"/>
+    <!--指定容错模式为：快速失败-->
+    <dubbo:provider cluster="failfast"/>
+    <!-- 用dubbo协议在20880端口暴露服务 -->
+    <dubbo:protocol name="dubbo" port="20880" />
+    <!--使用 dubbo 协议实现定义好的 api.PermissionService 接口-->
+    <dubbo:service interface="com.huawei.dubbo.provider.api.UserService" ref="userService" protocol="dubbo" />
+    <dubbo:service interface="com.huawei.dubbo.provider.api.SayHello"  ref="sayHello" protocol="dubbo" />
+    <!--具体实现该接口的 bean-->
+    <bean id="userService" class="com.huawei.dubbo.provider.UserServiceImpl"/>
+    <bean id="sayHello" class="com.huawei.dubbo.provider.SayHelloImpl"/>
+</beans>
+4、        provider编写main方法启动服务。
+5、        consumer端新建consumer.xml配置文件
+ <?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:dubbo="http://code.alibabatech.com/schema/dubbo"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+       http://code.alibabatech.com/schema/dubbo http://code.alibabatech.com/schema/dubbo/dubbo.xsd">
+    <dubbo:application name="first-consumer" owner="programmer" organization="dubbox"/>
+    <!--向 zookeeper 订阅 provider 的地址，由 zookeeper 定时推送-->
+    <dubbo:registry address="zookeeper://localhost:2181"/>
+    <!--使用 dubbo 协议调用定义好的 api.PermissionService 接口-->
+    <dubbo:reference id="userService" interface="com.huawei.dubbo.provider.api.UserService"/>
+    <dubbo:reference id="sayHello" interface="com.huawei.dubbo.provider.api.SayHello"/>
+    <dubbo:reference id="provider" interface="com.huawei.dubbo.provider.api.Provider2"/>
+</beans>
+
+五、单体应用改造为dubbo微服务的思路
+ 1、抽取出service、dao层的接口，放入一个独立的工程，entity也放在这个工程里。
+ 2、创建provider服务端，里面实现server和dao的接口，并通过spring容器管理后启动服务想注册中心注 册。
+3、创建consumer端，这边一般情况是webconsumer，包括原应用的controller层和一些网页资源，一般放在tomcat等服务器容器中运行。Consumer当然也可以作为一个服务代理向外提供rest服务。
+六、总结
+        Dubbo 出生于阿里系，是阿里巴巴服务化治理的核心框架，并被广泛应用于中国各互联网公司；只需要通过 Spring 配置的方式即可完成服务化，对于应用无入侵。设计的目的还是服务于自身的业务为主。框架本身的成熟度以及文档的完善程度，完全能满足各大互联网公司的业务需求。如果我们需要使用配置中心、分布式跟踪这些内容都需要自己去集成，这样无形中增加了使用 Dubbo 的难度。
